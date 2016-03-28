@@ -1,0 +1,10 @@
+deb http://run.hit.edu.cn/ubuntu/ precise main restricted universe multiverse  
+deb http://run.hit.edu.cn/ubuntu/ precise-security main restricted universe multiverse  
+deb http://run.hit.edu.cn/ubuntu/ precise-updates main restricted universe multiverse  
+deb http://run.hit.edu.cn/ubuntu/ precise-backports main restricted universe multiverse  
+deb http://run.hit.edu.cn/ubuntu/ precise-proposed main restricted universe multiverse  
+deb-src http://run.hit.edu.cn/ubuntu/ precise main restricted universe multiverse  
+deb-src http://run.hit.edu.cn/ubuntu/ precise-security main restricted universe multiverse  
+deb-src http://run.hit.edu.cn/ubuntu/ precise-updates main restricted universe multiverse  
+deb-src http://run.hit.edu.cn/ubuntu/ precise-backports main restricted universe multiverse  
+deb-src http://run.hit.edu.cn/ubuntu/ precise-proposed main restricted universe multiverse
