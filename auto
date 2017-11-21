@@ -1,0 +1,72 @@
+#!/bin/bash
+map(){
+ka=($1)
+va=($2)
+for i in $(seq 0 $(($(echo ${ka[@]} | wc -w)-1))); do test "$3" == "${ka[$i]}" && echo ${va[$i]} && break; done
+}
+
+#step 0: get hosts info.
+printf "password: " && read -s pass && echo;
+wd="/home/hitnis/check-network/host/"
+ia=($(cat << "EOF"
+10.10.11.130
+10.10.11.131
+10.10.11.132
+EOF
+))
+ha=("host_2" "host_1" "host_3");
+
+#step 1: set up hosts.
+#ha=($(ls -d host_* | sort -k2 -t_ -n))
+remote(){
+host=$1
+ip=$2
+expect -c "set timeout -1
+spawn ssh -o 'StrictHostKeyChecking no' root@$ip \"cd $wd; cat topo_gen.py | sed \\\"s/^an_dir.*\\\$/an_dir='$(echo $wd/$host/ | sed 's/\//\\\\\\\//g')'/g\\\" | sed \\\"s/^config_file_path.*\\\$/config_file_path='$(echo $wd/$host/ | sed 's/\//\\\\\\\//g')'/g\\\" >$wd/$host/topo_gen.py; cd $wd/$host && python topo_gen.py\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+}
+
+#step 2: set up ovs.
+ovs(){
+ip=$1
+expect -c "set timeout -1
+spawn bash -c \"cat ovs | ssh -o 'StrictHostKeyChecking no' root@$ip 'bash -s'\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+}
+gre(){
+n=$1
+s=$2
+t=$3
+si=$(map "${ha[*]}" "${ia[*]}" $s)
+ti=$(map "${ha[*]}" "${ia[*]}" $t)
+expect -c "set timeout -1
+spawn ssh root@$si \"ovs-vsctl add-port ovs0 gre$n -- set interface gre$n type=gre options:remote_ip=$ti\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+expect -c "set timeout -1
+spawn ssh root@$ti \"ovs-vsctl add-port ovs0 gre$n -- set interface gre$n type=gre options:remote_ip=$si\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+}
+
+#for i in ${ia[@]}; do ovs $i; done
+gre host_2 host_1 0
+
+#step 3: link hosts.
+ga=($(for h in ${ha[@]}; do for as in $(cat $h/out-asrela.txt | awk -F'#' '{print $1; print $2}' | sort | uniq); do test ! -z "$(cat $h/node.txt | grep BGP | grep \#$as$)" && echo $as && break; done; done))
+link(){
+as1=$(echo $1 | cut -d'#' -f1)
+as2=$(echo $1 | cut -d'#' -f2)
+host1=$(echo $1 | cut -d'#' -f3)
+host2=$(echo $1 | cut -d'#' -f4)
+ip1=$(map "${ha[*]}" "${ia[*]}" $host1)
+ip2=$(map "${ha[*]}" "${ia[*]}" $host2)
+echo $1#$ip1#$ip2
+}
+
+#remote "host_1" "10.10.11.131"
+#for i in ${ha[@]}; do remote $i $(map "${ha[*]}" "${ia[*]}" $i); done
+
+for h in ${ha[@]}; do cat $h/out-asrela.txt | while read line; do printf $(echo $line | cut -d'#' -f1,2)"#"; for i in $(echo $line | awk -F'#' '{print $1,$2}');do printf $(map "${ga[*]}" "${ha[*]}" $i)"#"; done; echo; done | sed 's/#$//g'; done | grep -v "#$" | grep -v "##" | while read l; do link $l; done
