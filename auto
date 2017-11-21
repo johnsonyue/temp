@@ -61,16 +61,36 @@ expect eof"
 ###############################
 #step 3: link hosts.
 ga=($(for h in ${ha[@]}; do for as in $(cat $h/out-asrela.txt | awk -F'#' '{print $1; print $2}' | sort | uniq); do test ! -z "$(cat $h/node.txt | grep BGP | grep \#$as$)" && echo $as && break; done; done))
+#link(){
+#as1=$(echo $1 | cut -d'#' -f1)
+#as2=$(echo $1 | cut -d'#' -f2)
+#host1=$(echo $1 | cut -d'#' -f3)
+#host2=$(echo $1 | cut -d'#' -f4)
+#ip1=$(map "${ha[*]}" "${ia[*]}" $host1)
+#ip2=$(map "${ha[*]}" "${ia[*]}" $host2)
+#echo "link: $1"
+#echo "$ip1: pipework br0 -i eth1 \$name \$ip"
+#echo "$ip2: pipework br0 -i eth1 \$name \$ip"
+#}
+
+#for h in ${ha[@]}; do cat $h/out-asrela.txt | while read line; do printf $(echo $line | cut -d'#' -f1,2)"#"; for i in $(echo $line | awk -F'#' '{print $1,$2}');do printf $(map "${ga[*]}" "${ha[*]}" $i)"#"; done; echo; done | sed 's/#$//g'; done | grep -v "#$" | grep -v "##" | while read l; do link $l; done
 link(){
-as1=$(echo $1 | cut -d'#' -f1)
-as2=$(echo $1 | cut -d'#' -f2)
-host1=$(echo $1 | cut -d'#' -f3)
-host2=$(echo $1 | cut -d'#' -f4)
-ip1=$(map "${ha[*]}" "${ia[*]}" $host1)
-ip2=$(map "${ha[*]}" "${ia[*]}" $host2)
-echo "link: $1"
-echo "$ip1: pipework br0 -i eth1 \$name \$ip"
-echo "$ip2: pipework br0 -i eth1 \$name \$ip"
+h1=host_$(echo $1 | cut -d'#' -f1)
+c1=$(echo $1 | cut -d'#' -f2)
+i1=$(echo $1 | cut -d'#' -f3)
+h2=host_$(echo $1 | cut -d'#' -f4)
+c2=$(echo $1 | cut -d'#' -f5)
+i2=$(echo $1 | cut -d'#' -f6)
+a1=$(map "${ha[*]}" "${ia[*]}" $h1)
+a2=$(map "${ha[*]}" "${ia[*]}" $h2)
+expect -c "set timeout -1
+spawn ssh -o 'StrictHostKeyChecking no' root@$a1 \"pipework br0 -i eth\$((\$(docker exec $c1 ifconfig | grep ^[a-z].* | grep -v lo | awk '{print \$1}' | grep -o [0-9]* | sort -nr | head -n 1)+1)) $c1 $i1\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+expect -c "set timeout -1
+spawn ssh -o 'StrictHostKeyChecking no' root@$a2 \"pipework br0 -i eth\$((\$(docker exec $c2 ifconfig | grep ^[a-z].* | grep -v lo | awk '{print \$1}' | grep -o [0-9]* | sort -nr | head -n 1)+1)) $c2 $i2\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
 }
 
-for h in ${ha[@]}; do cat $h/out-asrela.txt | while read line; do printf $(echo $line | cut -d'#' -f1,2)"#"; for i in $(echo $line | awk -F'#' '{print $1,$2}');do printf $(map "${ga[*]}" "${ha[*]}" $i)"#"; done; echo; done | sed 's/#$//g'; done | grep -v "#$" | grep -v "##" | while read l; do link $l; done
+cat $wd/<input> | while read l; do link $l; done
