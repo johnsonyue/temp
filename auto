@@ -7,15 +7,16 @@ for i in $(seq 0 $(($(echo ${ka[@]} | wc -w)-1))); do test "$3" == "${ka[$i]}" &
 
 #step 0: get hosts info.
 printf "password: " && read -s pass && echo;
-wd="/home/hitnis/check-network/host/"
+#wd="/home/hitnis/check-network/host/"
+wd="/home/hitnis/check-network/"
 ia=($(cat << "EOF"
-10.10.11.130
-10.10.11.131
+10.10.11.141
 10.10.11.132
 EOF
 ))
 #ha=($(ls -d host_* | sort -k2 -t_ -n))
-ha=("host_2" "host_1" "host_3");
+#ha=("host_2" "host_1" "host_3");
+ha=("host_1" "host_2");
 
 ###############################
 #step 1: set up ovs.
@@ -41,9 +42,9 @@ spawn ssh root@$ti \"ovs-vsctl add-port ovs0 gre$n -- set interface gre$n type=g
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 }
-#for i in ${ia[@]}; do ovs $i; done
-#l=$(($(echo ${ha[@]} | wc -w)))
-#for i in $(seq 0 $(($l-1))); do echo "gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}"; gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}; echo "gre $i ${ha[$((($i+1)%$l))]} ${ha[$i]}"; gre $i ${ha[$((($i+1)%$l))]} ${ha[$i]}; done
+for i in ${ia[@]}; do echo ">> ovs $i"; ovs $i; done
+l=$(($(echo ${ha[@]} | wc -w)))
+test $l -eq 2 && echo ">> gre 0 ${ha[0]} ${ha[$(((1)%$l))]}" && gre 0 ${ha[0]} ${ha[$(((1)%$l))]} || for i in $(seq 0 $(($l-1))); do echo ">> gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}"; gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}; done
 
 ###############################
 #step 2: set up hosts.
@@ -60,7 +61,7 @@ expect eof"
 
 ###############################
 #step 3: link hosts.
-ga=($(for h in ${ha[@]}; do for as in $(cat $h/out-asrela.txt | awk -F'#' '{print $1; print $2}' | sort | uniq); do test ! -z "$(cat $h/node.txt | grep BGP | grep \#$as$)" && echo $as && break; done; done))
+#ga=($(for h in ${ha[@]}; do for as in $(cat $h/out-asrela.txt | awk -F'#' '{print $1; print $2}' | sort | uniq); do test ! -z "$(cat $h/node.txt | grep BGP | grep \#$as$)" && echo $as && break; done; done))
 #link(){
 #as1=$(echo $1 | cut -d'#' -f1)
 #as2=$(echo $1 | cut -d'#' -f2)
@@ -84,13 +85,14 @@ i2=$(echo $1 | cut -d'#' -f6)
 a1=$(map "${ha[*]}" "${ia[*]}" $h1)
 a2=$(map "${ha[*]}" "${ia[*]}" $h2)
 expect -c "set timeout -1
-spawn ssh -o 'StrictHostKeyChecking no' root@$a1 \"pipework br0 -i eth\$((\$(docker exec $c1 ifconfig | grep ^[a-z].* | grep -v lo | awk '{print \$1}' | grep -o [0-9]* | sort -nr | head -n 1)+1)) $c1 $i1\"
+spawn ssh root@$a1 \"pipework br0 -i eth\\\$((\\\$(docker exec $c1 ifconfig | grep -e '^\[a-z\].*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c1 $i1\"
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 expect -c "set timeout -1
-spawn ssh -o 'StrictHostKeyChecking no' root@$a2 \"pipework br0 -i eth\$((\$(docker exec $c2 ifconfig | grep ^[a-z].* | grep -v lo | awk '{print \$1}' | grep -o [0-9]* | sort -nr | head -n 1)+1)) $c2 $i2\"
+spawn ssh root@$a2 \"pipework br0 -i eth\\\$((\\\$(docker exec $c2 ifconfig | grep -e '^\[a-z\].*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c2 $i2\"
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 }
 
-cat $wd/<input> | while read l; do link $l; done
+#debug
+cat $wd/interlink.txt | while read l; do link $l; done
