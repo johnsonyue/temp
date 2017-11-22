@@ -1,7 +1,8 @@
 #!/bin/bash
 #dep
-apt-get install -y -o Acquire::ForceIPv4=true bridge-utils openvswitch-switch openvswitch-common
+apt-get install -y -o Acquire::ForceIPv4=true bridge-utils openvswitch-switch openvswitch-common python-pip
 service openvswitch-switch start
+pip install IPy
 
 #pipework
 git clone https://github.com/jpetazzo/pipework
@@ -15,6 +16,10 @@ echo "brctl addbr br0"
 brctl addbr br0
 echo "ip link set dev br0 up"
 ip link set dev br0 up
+echo "brctl addbr br1"
+brctl addbr br1
+echo "ip link set dev br1 up"
+ip link set dev br1 up
 
 echo "ovs-vsctl add-br ovs0"
 ovs-vsctl add-br ovs0
