@@ -7,21 +7,58 @@ for i in $(seq 0 $(($(echo ${ka[@]} | wc -w)-1))); do test "$3" == "${ka[$i]}" &
 
 #step 0: get hosts info.
 printf "password: " && read -s pass && echo;
-#wd="/home/hitnis/check-network/host/"
-wd="/home/hitnis/check-network/"
+wd="/home/hitnis/distro/"
+#10.10.11.130
+#10.10.11.131
+#10.10.11.132
 ia=($(cat << "EOF"
-10.10.11.141
-10.10.11.132
+10.10.11.210
+10.10.11.212
 EOF
 ))
-#ha=($(ls -d host_* | sort -k2 -t_ -n))
-#ha=("host_2" "host_1" "host_3");
+#ha=("host_1" "host_2" "host_3" "host_4" "host_5");
 ha=("host_1" "host_2");
+
+dist(){
+hn=$1
+ip=$2
+
+q=$(expect -c "set timeout -1
+spawn ssh -o \"StrictHostKeyChecking no\" root@10.10.11.210 \"mkdir -p $wd && test ! -z \\\"\\\$(docker images | grep centos-quagga-bgp.*latest)\\\" && echo has || echo not\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof" | tail -n 1)
+
+test ! -z "$(echo $q | grep not)" && expect -c "set timeout -1
+spawn scp -o \"StrictHostKeyChecking no\" $wd/image.tar root@$ip:$wd
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+
+expect -c "set timeout -1
+spawn scp -o \"StrictHostKeyChecking no\" $(ls $wd/* -d | grep -v host-node | grep -v image.tar | xargs) $wd/host-node/node-list-$hn.bgp $wd/host-node/link-list-$hn.bgp $wd/host-node/node-list-$hn root@$ip:$wd
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+expect -c "set timeout -1
+spawn ssh root@$ip \"cd $wd && test -z \\\"\\\$(docker images | grep centos-quagga-bgp.*latest)\\\" && docker load -i image.tar && python gen_container.py $wd/host-node/node-list-$i.bgp $wd/host-node/link-list-$i.bgp $wd/host-node/node-list-$i $wd/host-node/node-list-$i.bgp.new\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
+}
+
+an=50;
+l=$(($(echo ${ha[@]} | wc -w)))
+test -d $wd/host-node && rm -r $wd/host-node
+cd $wd
+mkdir -p $wd/host-node && python gen-as-topo.py $l $an $wd/host-node
+for i in $(seq 1 $l); do echo ">> python gen-bgp.py $wd/host-node/node-list-$i $wd/host-node/link-list-$i $wd/host-node/interlink-list-$i"; python gen-bgp.py $wd/host-node/node-list-$i $wd/host-node/link-list-$i $wd/host-node/interlink-list-$i; echo ">> dist $i ${ia[$(($i-1))]}"; dist $i ${ia[$(($i-1))]}; done
+cat $wd/host-node/interlink-list-*.bgp >$wd/host-node/interlink-list-all.bgp
 
 ###############################
 #step 1: set up ovs.
 ovs(){
 ip=$1
+expect -c "set timeout -1
+spawn bash -c \"cat clear | ssh -o 'StrictHostKeyChecking no' root@$ip 'bash -s'\"
+expect -re \".*password.*\" {send \"$pass\r\"}
+expect eof"
 expect -c "set timeout -1
 spawn bash -c \"cat ovs | ssh -o 'StrictHostKeyChecking no' root@$ip 'bash -s'\"
 expect -re \".*password.*\" {send \"$pass\r\"}
@@ -42,6 +79,7 @@ spawn ssh root@$ti \"ovs-vsctl add-port ovs0 gre$n -- set interface gre$n type=g
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 }
+
 for i in ${ia[@]}; do echo ">> ovs $i"; ovs $i; done
 l=$(($(echo ${ha[@]} | wc -w)))
 test $l -eq 2 && echo ">> gre 0 ${ha[0]} ${ha[$(((1)%$l))]}" && gre 0 ${ha[0]} ${ha[$(((1)%$l))]} || for i in $(seq 0 $(($l-1))); do echo ">> gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}"; gre $i ${ha[$i]} ${ha[$((($i+1)%$l))]}; done
@@ -77,22 +115,21 @@ expect eof"
 #for h in ${ha[@]}; do cat $h/out-asrela.txt | while read line; do printf $(echo $line | cut -d'#' -f1,2)"#"; for i in $(echo $line | awk -F'#' '{print $1,$2}');do printf $(map "${ga[*]}" "${ha[*]}" $i)"#"; done; echo; done | sed 's/#$//g'; done | grep -v "#$" | grep -v "##" | while read l; do link $l; done
 link(){
 h1=host_$(echo $1 | cut -d'#' -f1)
-c1=$(echo $1 | cut -d'#' -f2)
-i1=$(echo $1 | cut -d'#' -f3)
-h2=host_$(echo $1 | cut -d'#' -f4)
-c2=$(echo $1 | cut -d'#' -f5)
-i2=$(echo $1 | cut -d'#' -f6)
+c1=$(echo $1 | cut -d'#' -f3)
+i1=$(echo $1 | cut -d'#' -f4)
+h2=host_$(echo $1 | cut -d'#' -f5)
+c2=$(echo $1 | cut -d'#' -f7)
+i2=$(echo $1 | cut -d'#' -f8)
 a1=$(map "${ha[*]}" "${ia[*]}" $h1)
 a2=$(map "${ha[*]}" "${ia[*]}" $h2)
 expect -c "set timeout -1
-spawn ssh root@$a1 \"pipework br0 -i eth\\\$((\\\$(docker exec $c1 ifconfig | grep -e '^\[a-z\].*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c1 $i1\"
+spawn ssh root@$a1 \"pipework br0 -i eth\\\$((\\\$(docker exec $c1 ifconfig | grep -e '^eth.*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c1 $i1\"
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 expect -c "set timeout -1
-spawn ssh root@$a2 \"pipework br0 -i eth\\\$((\\\$(docker exec $c2 ifconfig | grep -e '^\[a-z\].*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c2 $i2\"
+spawn ssh root@$a2 \"pipework br0 -i eth\\\$((\\\$(docker exec $c2 ifconfig | grep -e '^eth.*' | grep -v lo | awk '{print \\\$1}' | grep -o -e '\[0-9\]*' | sort -nr | head -n 1)+1)) $c2 $i2\"
 expect -re \".*password.*\" {send \"$pass\r\"}
 expect eof"
 }
 
-#debug
-cat $wd/interlink.txt | while read l; do link $l; done
+cat $wd/host-node/interlink-list-all.bgp | while read l; do link $l; done
