@@ -1,0 +1,4 @@
+#!/bin/bash
+ifconfig br0 down && brctl delbr br0;
+ifconfig br1 down && brctl delbr br1;
+ovs-vsctl del-br ovs0;
